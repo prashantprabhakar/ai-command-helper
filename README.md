@@ -16,16 +16,46 @@ A lightweight CLI that converts **natural language instructions into safe shell 
 2. Clone this repo and install dependencies:
 
 ```bash
+git clone https://github.com/<your-org>/ai-cli-helper.git
+cd ai-cli-helper
 npm install
+```
+
+3. Install the CLI globally so you can run it from anywhere:
+
+```bash
+npm install -g .
 ```
 
 ## Usage
 
+Once installed globally, you can run the tool as `ai-cmd`.
+
+### Basic
+
 ```bash
-npx ai-cmd "find large files in this folder"
+ai-cmd "find large files in this folder"
 ```
 
-Example output:
+### Auto-confirm (skip prompt)
+
+```bash
+ai-cmd --yes "find large files in this folder"
+```
+
+### Show explanation
+
+```bash
+ai-cmd --explain "find large files in this folder"
+```
+
+### Force a specific shell
+
+```bash
+ai-cmd --shell=pwsh "list files"
+```
+
+### Example output
 
 ```
 Command:
@@ -33,8 +63,6 @@ find . -type f -size +100M
 
 Explanation:
 Searches the current directory recursively for files larger than 100MB.
-
-Run command? (y/n)
 ```
 
 ## Notes
