@@ -151,12 +151,16 @@ async function main() {
     }
   }
 
-  const shouldRun = flags.yes || (await askYesNo('\nRun command? (y/n) '));
-  if (availability?.exists === false && shouldRun) {
+  const shouldRun =
+    flags.yes ||
+    (!generationResult.risky ? true : await askYesNo('\nRun command? (y/n) '));
+
+  if (generationResult.risky && availability?.exists === false && shouldRun) {
     console.log('\nNote: the command does not appear to be installed.');
     console.log('If you still want to attempt it, the error will be shown below.');
   }
-  if (!shouldRun) {
+
+  if (generationResult.risky && !shouldRun) {
     console.log('Cancelled.');
     process.exit(0);
   }
