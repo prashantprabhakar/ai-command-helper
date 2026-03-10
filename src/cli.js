@@ -1,59 +1,14 @@
 #!/usr/bin/env node
 
-const path = require('path');
-const fs = require('fs');
-const readline = require('readline');
 const { runPipeline } = require('./graph');
-const { executeCommand } = require('./tools/executeCommand');
 const { checkCommandAvailable } = require('./tools/commandChecker');
-const { repairCommand } = require('./agents/repairAgent');
+const { askYesNo } = require('./tools/prompt');
 
 function usage() {
   console.log('Usage: ai-cmd [--yes] [--shell=<shell>] "<natural language instruction>"');
   console.log('Example: ai-cmd "find large files"');
   console.log('Example (auto-confirm): ai-cmd --yes "find large files"');
   console.log('Example (PowerShell): ai-cmd --shell=pwsh "find large files"');
-}
-
-async function readStdin() {
-  return new Promise((resolve) => {
-    let data = '';
-    process.stdin.setEncoding('utf8');
-
-    process.stdin.on('data', (chunk) => {
-      data += chunk;
-    });
-
-    process.stdin.on('end', () => {
-      resolve(data);
-    });
-
-    // In case stdin is already ended
-    if (process.stdin.readableEnded) {
-      resolve(data);
-    }
-  });
-}
-
-async function askYesNo(question) {
-  if (!process.stdin.isTTY) {
-    // In non-interactive environments, try to read stdin for an answer.
-    const stdin = (await readStdin()).trim().toLowerCase();
-    return stdin === 'y' || stdin === 'yes';
-  }
-
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      const normalized = answer.trim().toLowerCase();
-      resolve(normalized === 'y' || normalized === 'yes');
-    });
-  });
 }
 
 function detectShell() {
@@ -133,11 +88,16 @@ async function main() {
 
   const detectedShell = flags.shell || detectShell();
 
-
-  const result = await runPipeline({ query: rawQuery, platform: process.platform, shell: detectedShell });
+  // Generate the command (without executing it).
+  const generationResult = await runPipeline({
+    query: rawQuery,
+    platform: process.platform,
+    shell: detectedShell,
+    runCommand: false,
+  });
 
   // Normalize command string (strip wrapping backticks/quotes) for display and execution.
-  const cmd = (result.command || '').trim().replace(/^['"`]+|['"`]+$/g, '');
+  const cmd = (generationResult.command || '').trim().replace(/^['"`]+|['"`]+$/g, '');
 
   // Pre-check whether the generated command is available in PATH.
   const availability = await checkCommandAvailable(cmd, process.platform);
@@ -155,12 +115,12 @@ async function main() {
   console.log('\nCommand:');
   console.log(cmd || '(no command generated)');
   console.log('\nExplanation:');
-  console.log(result.explanation || '(no explanation generated)');
+  console.log(generationResult.explanation || '(no explanation generated)');
 
-  if (result.risky) {
+  if (generationResult.risky) {
     console.log('\n⚠ Warning: This command may be unsafe.');
-    if (result.reason) {
-      console.log('Reason:', result.reason);
+    if (generationResult.reason) {
+      console.log('Reason:', generationResult.reason);
     }
   }
 
@@ -174,60 +134,33 @@ async function main() {
     process.exit(0);
   }
 
-  if (!result.command) {
+  if (!generationResult.command) {
     console.log('No command to execute.');
     process.exit(1);
   }
 
-  async function runWithRepair(command) {
-    const result = await executeCommand(command, { shell: detectedShell });
+  // Execute (and repair if needed) via the pipeline.
+  const execResult = await runPipeline({
+    query: rawQuery,
+    platform: process.platform,
+    shell: detectedShell,
+    runCommand: true,
+    command: cmd,
+  });
 
-    if (!result.error) {
-      return { success: true, command, result };
-    }
-
-    // Try to repair the command once if it fails.
-    const repair = await repairCommand({
-      command,
-      errorMessage: result.error.message,
-      stderr: result.stderr,
-      stdout: result.stdout,
-      platform: process.platform,
-      shell: detectedShell,
-      query: rawQuery,
-    });
-
-    const repairedCommand = (repair || '').trim();
-    if (!repairedCommand || repairedCommand === command) {
-      return { success: false, command, result };
-    }
-
-    console.log('\n[ai-cmd] Repaired command suggestion:');
-    console.log(repairedCommand);
-
-    const shouldRunRepaired = flags.yes || (await askYesNo('\nRun repaired command? (y/n) '));
-    if (!shouldRunRepaired) {
-      return { success: false, command, result };
-    }
-
-    const secondTry = await executeCommand(repairedCommand, { shell: detectedShell });
-    return { success: !secondTry.error, command: repairedCommand, result: secondTry };
-  }
-
-  const runResult = await runWithRepair(cmd);
-  if (!runResult.success) {
-    console.error('Command failed:', runResult.result.error);
-    if (runResult.result.stderr) {
-      console.error(runResult.result.stderr);
+  if (!execResult.executedSuccessfully) {
+    console.error('Command failed:', execResult.errorMessage || 'unknown error');
+    if (execResult.stderr) {
+      console.error(execResult.stderr);
     }
     process.exit(1);
   }
 
-  if (runResult.result.stdout) {
-    process.stdout.write(runResult.result.stdout);
+  if (execResult.stdout) {
+    process.stdout.write(execResult.stdout);
   }
-  if (runResult.result.stderr) {
-    process.stderr.write(runResult.result.stderr);
+  if (execResult.stderr) {
+    process.stderr.write(execResult.stderr);
   }
 
   process.exit(0);
