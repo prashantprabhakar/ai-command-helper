@@ -14,9 +14,23 @@ const { repairCommand } = require('./repairAgent');
  * Adds to state:
  * - stdout, stderr, executedCommand, executedSuccessfully
  */
+function _balanceQuotes(cmd) {
+  if (!cmd || typeof cmd !== 'string') return cmd;
+  const quoteChars = ['"', "'", '`'];
+  let balanced = cmd;
+
+  for (const q of quoteChars) {
+    const count = (balanced.match(new RegExp(`\\${q}`, 'g')) || []).length;
+    if (count % 2 !== 0) {
+      balanced = `${balanced}${q}`;
+    }
+  }
+
+  return balanced;
+}
+
 async function runAgent(state) {
-  const { command, shell, runCommand, platform, query } = state;
-  const debug = !!process.env.AI_CMD_DEBUG;
+  const { command, shell, runCommand, platform, query, verbose } = state;
 
   if (!runCommand) {
     return { ...state, executedSuccessfully: false, executedCommand: null, stdout: '', stderr: '' };
@@ -26,40 +40,87 @@ async function runAgent(state) {
   let attempts = 0;
   let currentCommand = command ? command.trim() : '';
   let lastExec = { error: new Error('No command generated'), stdout: '', stderr: '' };
+  const attemptHistory = [];
 
   while (attempts < maxAttempts) {
     attempts += 1;
 
-    if (!currentCommand) {
-      if (debug) {
-        // eslint-disable-next-line no-console
-        console.log(`[ai-cmd] attempt ${attempts}/${maxAttempts}: no command generated, attempting repair`);
-      }
-    } else if (debug) {
+    const attemptRecord = {
+      attempt: attempts,
+      command: currentCommand || '<none>',
+      success: false,
+      errorMessage: null,
+      exitCode: null,
+      stdout: '',
+      stderr: '',
+    };
+
+    // Print each attempt so users see progress.
+    if (attempts === 1) {
+      // First run is the primary command.
       // eslint-disable-next-line no-console
-      console.log(`[ai-cmd] attempt ${attempts}/${maxAttempts}: executing command`);
+      process.stdout.write(`\nRunning command: ${attemptRecord.command}`);
+    } else {
+      // Subsequent retries should be clearly labeled as such.
+      // eslint-disable-next-line no-console
+      process.stdout.write(`\nAttempt #${attempts} -> running command: ${attemptRecord.command}`);
     }
 
     if (currentCommand) {
+      // Apply simple heuristics to fix common issues (like missing closing quotes)
+      currentCommand = _balanceQuotes(currentCommand);
+
       lastExec = await executeCommand(currentCommand, { shell });
+      attemptRecord.stdout = lastExec.stdout;
+      attemptRecord.stderr = lastExec.stderr;
+      attemptRecord.exitCode = lastExec.error?.code;
+
+      if (!lastExec.error) {
+        attemptRecord.success = true;
+        attemptHistory.push(attemptRecord);
+
+        // eslint-disable-next-line no-console
+        process.stdout.write(' ✅\n');
+
+        return {
+          ...state,
+          executedSuccessfully: true,
+          executedCommand: currentCommand,
+          stdout: lastExec.stdout,
+          stderr: lastExec.stderr,
+          attempts,
+          attemptHistory,
+        };
+      }
+
+      attemptRecord.errorMessage = (lastExec.error.message || '').split(/\r?\n/)[0];
+      // eslint-disable-next-line no-console
+      process.stdout.write(' ❌\n');
+
+      if (verbose) {
+        // Print a short error line below to keep the command line clean.
+        // eslint-disable-next-line no-console
+        console.error(`    Error: ${attemptRecord.errorMessage}`);
+      }
+    } else {
+      // No command to execute; this is treated as a failure and triggers repair.
+      attemptRecord.errorMessage = 'No command was generated to execute.';
+      // eslint-disable-next-line no-console
+      process.stdout.write(' ❌\n');
+
+      if (verbose) {
+        // eslint-disable-next-line no-console
+        console.error('    Error: No command generated.');
+      }
     }
 
-    if (!lastExec.error) {
-      return {
-        ...state,
-        executedSuccessfully: true,
-        executedCommand: currentCommand,
-        stdout: lastExec.stdout,
-        stderr: lastExec.stderr,
-        attempts,
-      };
-    }
+    attemptHistory.push(attemptRecord);
 
     const repaired = await repairCommand({
       command: currentCommand,
-      errorMessage: lastExec.error?.message || 'Failed to generate or execute command',
-      stderr: lastExec.stderr,
-      stdout: lastExec.stdout,
+      errorMessage: attemptRecord.errorMessage || 'Failed to generate or execute command',
+      stderr: attemptRecord.stderr,
+      stdout: attemptRecord.stdout,
       platform,
       shell,
       query,
@@ -70,11 +131,10 @@ async function runAgent(state) {
       break;
     }
 
-    if (debug) {
+    if (verbose) {
       // eslint-disable-next-line no-console
-      console.log(`[ai-cmd] attempt ${attempts}/${maxAttempts}: repaired command suggested: ${repairedCommand}`);
+      console.log(`  🔧 Repair suggested: ${repairedCommand}`);
     }
-
     currentCommand = repairedCommand;
   }
 
@@ -86,6 +146,7 @@ async function runAgent(state) {
     stderr: lastExec.stderr,
     errorMessage: `Unable to execute command after ${attempts} attempt(s).`,
     attempts,
+    attemptHistory,
   };
 }
 

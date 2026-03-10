@@ -8,6 +8,48 @@ const client = new LLMClient();
  * This is used when a generated command fails at runtime (non-zero exit code).
  * The model is given the original command, the error output, and a short description of the failure.
  */
+function _looksLikeCommand(text) {
+  if (!text || typeof text !== 'string') return false;
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  // Naive heuristic: commands typically start with a word and may contain
+  // pipes/redirects/etc. If it looks like a sentence, we reject.
+  const firstWord = trimmed.split(/\s+/)[0];
+  if (!/^[a-zA-Z0-9._-]+$/.test(firstWord)) return false;
+
+  const proseIndicators = ['this', 'the', 'a', 'an', 'it', 'should', 'will', 'option', 'command'];
+  const lower = trimmed.toLowerCase();
+  if (proseIndicators.some((w) => lower.startsWith(`${w} `))) return false;
+
+  return true;
+}
+
+function _extractCommand(text) {
+  if (!text || typeof text !== 'string') return null;
+  const firstLine = text.split(/\r?\n/)[0].trim();
+  if (!firstLine) return null;
+
+  // Remove obvious explanation tails that start with common phrases.
+  const stopPatterns = [
+    /\s+This command\b/i,
+    /\s+This gives\b/i,
+    /\s+Use\b/i,
+    /\s+It\b/i,
+    /\s+The\b/i,
+    /\s+-\s+/,
+  ];
+
+  for (const pat of stopPatterns) {
+    const match = firstLine.match(pat);
+    if (match && typeof match.index === 'number') {
+      return firstLine.slice(0, match.index).trim();
+    }
+  }
+
+  return firstLine;
+}
+
 async function repairCommand({ command, errorMessage, stderr, stdout, platform, shell, query }) {
   const isMissingCommand = !command || !command.trim();
 
@@ -49,7 +91,18 @@ Provide a fixed command that is likely to work on this platform and shell. ONLY 
     });
 
     const normalized = raw.replace(/\r?\n+/g, ' ').trim();
-    return normalized || null;
+    const extracted = _extractCommand(normalized);
+    if (!extracted) return null;
+
+    // If the LLM output includes explanation, try to remove it.
+    const candidate = extracted.trim();
+    if (_looksLikeCommand(candidate)) {
+      return candidate;
+    }
+
+    // Fallback: if the first line doesn't look like a command, bail so we don't
+    // run nonsense shell code.
+    return null;
   } catch (err) {
     // If the model fails, return null so the caller can stop retrying.
     return null;

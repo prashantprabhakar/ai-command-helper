@@ -6,9 +6,9 @@ const { askYesNo } = require('./tools/prompt');
 const { runAgent } = require('./agents/runAgent')
 
 function usage() {
-  console.log('Usage: ai-cmd [--yes] [--shell=<shell>] "<natural language instruction>"');
-  console.log('Example: ai-cmd "find large files"');
-  console.log('Example (auto-confirm): ai-cmd --yes "find large files"');
+    console.log('Usage: ai-cmd [--yes] [--explain] [--shell=<shell>] "<natural language instruction>"');
+    console.log('Example: ai-cmd "find large files"');
+    console.log('Example (show explanation): ai-cmd --explain "find large files"');
   console.log('Example (PowerShell): ai-cmd --shell=pwsh "find large files"');
 }
 
@@ -51,6 +51,8 @@ async function main() {
   const flags = {
     yes: false,
     shell: undefined,
+    explain: false,
+    verbose: false,
   };
 
   for (let i = 0; i < rawArgs.length; i += 1) {
@@ -58,6 +60,26 @@ async function main() {
 
     if (arg === '--yes' || arg === '-y') {
       flags.yes = true;
+      continue;
+    }
+
+    if (arg === '--explain') {
+      flags.explain = true;
+      continue;
+    }
+
+    if (arg === '--no-explain') {
+      flags.explain = false;
+      continue;
+    }
+
+    if (arg === '--verbose') {
+      flags.verbose = true;
+      continue;
+    }
+
+    if (arg === '--quiet') {
+      flags.verbose = false;
       continue;
     }
 
@@ -117,8 +139,10 @@ async function main() {
 
   console.log('\nCommand:');
   console.log(cmd || '(no command generated)');
-  console.log('\nExplanation:');
-  console.log(generationResult.explanation || '(no explanation generated)');
+  if (flags.explain) {
+    console.log('\nExplanation:');
+    console.log(generationResult.explanation || '(no explanation generated)');
+  }
 
   if (generationResult.risky) {
     console.log('\n⚠ Warning: This command may be unsafe.');
@@ -144,18 +168,35 @@ async function main() {
     platform: process.platform,
     query: rawQuery,
     runCommand: true,
+    verbose: flags.verbose,
   });
 
   if (!execResult.executedSuccessfully) {
-    console.error('\n❌ Unable to execute command after retrying.');
-    if (execResult.attempts && execResult.attempts > 1) {
-      console.error(`   (Attempted ${execResult.attempts} time${execResult.attempts > 1 ? 's' : ''})`);
-    }
-    if (execResult.errorMessage) {
-      console.error(`   Reason: ${execResult.errorMessage}`);
-    }
-    if (execResult.stderr) {
-      console.error(execResult.stderr);
+    if (flags.verbose) {
+      console.error('\n❌ Unable to execute command after retrying.');
+      if (execResult.attempts && execResult.attempts > 1) {
+        console.error(`   (Attempted ${execResult.attempts} time${execResult.attempts > 1 ? 's' : ''})`);
+      }
+
+      if (Array.isArray(execResult.attemptHistory) && execResult.attemptHistory.length) {
+        console.error('\nAttempt history:');
+        execResult.attemptHistory.forEach((attempt) => {
+          const status = attempt.success ? '✅' : '❌';
+          const msg = attempt.errorMessage ? ` - ${attempt.errorMessage}` : '';
+          console.error(`  ${attempt.attempt}) ${attempt.command} ${status}${msg}`);
+        });
+      }
+
+      if (execResult.errorMessage) {
+        console.error(`\nFinal error: ${execResult.errorMessage}`);
+      }
+      if (execResult.stderr) {
+        console.error(execResult.stderr);
+      }
+    } else {
+      if (execResult.errorMessage) {
+        console.error(`\nError: ${execResult.errorMessage}`);
+      }
     }
     process.exit(1);
   }
