@@ -1,6 +1,5 @@
 const { executeCommand } = require('../tools/executeCommand');
 const { repairCommand } = require('./repairAgent');
-const { askYesNo } = require('../tools/prompt');
 
 /**
  * Executes the generated command and attempts to repair it on failure.
@@ -17,74 +16,76 @@ const { askYesNo } = require('../tools/prompt');
  */
 async function runAgent(state) {
   const { command, shell, runCommand, platform, query } = state;
+  const debug = !!process.env.AI_CMD_DEBUG;
 
   if (!runCommand) {
     return { ...state, executedSuccessfully: false, executedCommand: null, stdout: '', stderr: '' };
   }
 
-  // If the command is empty, bail early.
-  if (!command || !command.trim()) {
-    return { ...state, executedSuccessfully: false, executedCommand: command, stdout: '', stderr: '' };
+  const maxAttempts = 3;
+  let attempts = 0;
+  let currentCommand = command ? command.trim() : '';
+  let lastExec = { error: new Error('No command generated'), stdout: '', stderr: '' };
+
+  while (attempts < maxAttempts) {
+    attempts += 1;
+
+    if (!currentCommand) {
+      if (debug) {
+        // eslint-disable-next-line no-console
+        console.log(`[ai-cmd] attempt ${attempts}/${maxAttempts}: no command generated, attempting repair`);
+      }
+    } else if (debug) {
+      // eslint-disable-next-line no-console
+      console.log(`[ai-cmd] attempt ${attempts}/${maxAttempts}: executing command`);
+    }
+
+    if (currentCommand) {
+      lastExec = await executeCommand(currentCommand, { shell });
+    }
+
+    if (!lastExec.error) {
+      return {
+        ...state,
+        executedSuccessfully: true,
+        executedCommand: currentCommand,
+        stdout: lastExec.stdout,
+        stderr: lastExec.stderr,
+        attempts,
+      };
+    }
+
+    const repaired = await repairCommand({
+      command: currentCommand,
+      errorMessage: lastExec.error?.message || 'Failed to generate or execute command',
+      stderr: lastExec.stderr,
+      stdout: lastExec.stdout,
+      platform,
+      shell,
+      query,
+    });
+
+    const repairedCommand = (repaired || '').trim();
+    if (!repairedCommand || repairedCommand === currentCommand) {
+      break;
+    }
+
+    if (debug) {
+      // eslint-disable-next-line no-console
+      console.log(`[ai-cmd] attempt ${attempts}/${maxAttempts}: repaired command suggested: ${repairedCommand}`);
+    }
+
+    currentCommand = repairedCommand;
   }
 
-  const execResult = await executeCommand(command, { shell });
-  if (!execResult.error) {
-    return {
-      ...state,
-      executedSuccessfully: true,
-      executedCommand: command,
-      stdout: execResult.stdout,
-      stderr: execResult.stderr,
-    };
-  }
-
-  // Attempt a repair pass.
-  const repaired = await repairCommand({
-    command,
-    errorMessage: execResult.error.message,
-    stderr: execResult.stderr,
-    stdout: execResult.stdout,
-    platform,
-    shell,
-    query,
-  });
-
-  const repairedCommand = (repaired || '').trim();
-  if (!repairedCommand || repairedCommand === command) {
-    return {
-      ...state,
-      executedSuccessfully: false,
-      executedCommand: command,
-      stdout: execResult.stdout,
-      stderr: execResult.stderr,
-      errorMessage: execResult.error?.message,
-      repaired: false,
-    };
-  }
-
-  console.log('\n[ai-cmd] Repaired command suggestion:');
-  console.log(repairedCommand);
-
-  const shouldRunRepaired = await askYesNo('\nRun repaired command? (y/n) ');
-  if (!shouldRunRepaired) {
-    return {
-      ...state,
-      executedSuccessfully: false,
-      executedCommand: command,
-      stdout: execResult.stdout,
-      stderr: execResult.stderr,
-    };
-  }
-
-  const secondTry = await executeCommand(repairedCommand, { shell });
   return {
     ...state,
-    executedSuccessfully: !secondTry.error,
-    executedCommand: repairedCommand,
-    stdout: secondTry.stdout,
-    stderr: secondTry.stderr,
-    errorMessage: secondTry.error?.message,
-    repaired: true,
+    executedSuccessfully: false,
+    executedCommand: currentCommand,
+    stdout: lastExec.stdout,
+    stderr: lastExec.stderr,
+    errorMessage: `Unable to execute command after ${attempts} attempt(s).`,
+    attempts,
   };
 }
 

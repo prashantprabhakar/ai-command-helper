@@ -99,17 +99,20 @@ async function main() {
   // Normalize command string (strip wrapping backticks/quotes) for display and execution.
   const cmd = (generationResult.command || '').trim().replace(/^['"`]+|['"`]+$/g, '');
 
-  // Pre-check whether the generated command is available in PATH.
-  const availability = await checkCommandAvailable(cmd, process.platform);
-  if (!availability.exists) {
-    console.warn('\n⚠ Command not found:', availability.command);
-    if (availability.hint?.install) {
-      console.warn('  Suggestion:', availability.hint.install);
+  // Only check availability if we have a command to validate.
+  let availability;
+  if (cmd) {
+    availability = await checkCommandAvailable(cmd, process.platform);
+    if (!availability.exists) {
+      console.warn('\n⚠ Command not found:', availability.command);
+      if (availability.hint?.install) {
+        console.warn('  Suggestion:', availability.hint.install);
+      }
+      if (availability.hint?.alternatives?.length) {
+        console.warn('  Alternatives:', availability.hint.alternatives.join(', '));
+      }
+      console.warn('  You may need to install it or run in a different shell.');
     }
-    if (availability.hint?.alternatives?.length) {
-      console.warn('  Alternatives:', availability.hint.alternatives.join(', '));
-    }
-    console.warn('  You may need to install it or run in a different shell.');
   }
 
   console.log('\nCommand:');
@@ -125,7 +128,7 @@ async function main() {
   }
 
   const shouldRun = flags.yes || (await askYesNo('\nRun command? (y/n) '));
-  if (availability.exists === false && shouldRun) {
+  if (availability?.exists === false && shouldRun) {
     console.log('\nNote: the command does not appear to be installed.');
     console.log('If you still want to attempt it, the error will be shown below.');
   }
@@ -149,9 +152,12 @@ async function main() {
   });
 
   if (!execResult.executedSuccessfully) {
-    console.error('Command failed:', execResult.errorMessage || 'unknown error');
-    if (execResult.stderr) {
-      console.error(execResult.stderr);
+    console.error('\n❌ Unable to process your request after retrying.');
+    if (execResult.attempts && execResult.attempts > 1) {
+      console.error(`   (Attempted ${execResult.attempts} time${execResult.attempts > 1 ? 's' : ''})`);
+    }
+    if (execResult.errorMessage) {
+      console.error(`   Error: ${execResult.errorMessage}`);
     }
     process.exit(1);
   }

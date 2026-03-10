@@ -38,6 +38,11 @@ pipeline.use(async (state) => {
 });
 
 pipeline.use(async (state) => {
+  if (!state.command) {
+    // If we couldn't generate a command, skip safety + explanation stages.
+    return state;
+  }
+
   if (debug) {
     // eslint-disable-next-line no-console
     console.log('[ai-cmd] pipeline: validating safety');
@@ -47,6 +52,11 @@ pipeline.use(async (state) => {
 });
 
 pipeline.use(async (state) => {
+  if (!state.command) {
+    // Command was missing and will be handled by the runAgent (repair/retry).
+    return state;
+  }
+
   if (debug) {
     // eslint-disable-next-line no-console
     console.log('[ai-cmd] pipeline: generating explanation');
