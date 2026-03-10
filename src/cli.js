@@ -55,6 +55,39 @@ async function askYesNo(question) {
   });
 }
 
+function detectShell() {
+  const env = process.env;
+
+  // On Windows, prefer MSYS/MinGW when present (git bash)
+  if (process.platform === 'win32') {
+    // Git Bash / MSYS
+    if (env.MSYSTEM) {
+      return 'bash';
+    }
+    if (env.SHELL && env.SHELL.toLowerCase().includes('bash')) {
+      return 'bash';
+    }
+    if (env.ComSpec && env.ComSpec.toLowerCase().includes('powershell')) {
+      return 'powershell';
+    }
+    if (env.ComSpec && env.ComSpec.toLowerCase().includes('cmd.exe')) {
+      return 'cmd';
+    }
+    return 'cmd';
+  }
+
+  // On POSIX, use SHELL if available.
+  if (env.SHELL) {
+    const lowered = env.SHELL.toLowerCase();
+    if (lowered.includes('zsh')) return 'zsh';
+    if (lowered.includes('bash')) return 'bash';
+    if (lowered.includes('fish')) return 'fish';
+    return 'sh';
+  }
+
+  return 'sh';
+}
+
 async function main() {
   const rawArgs = process.argv.slice(2);
   const args = [];
@@ -97,7 +130,10 @@ async function main() {
     process.exit(1);
   }
 
-  const result = await runPipeline({ query: rawQuery });
+  const detectedShell = flags.shell || detectShell();
+
+
+  const result = await runPipeline({ query: rawQuery, platform: process.platform, shell: detectedShell });
 
   // Normalize command string (strip wrapping backticks/quotes) for display and execution.
   const cmd = (result.command || '').trim().replace(/^['"`]+|['"`]+$/g, '');
@@ -143,7 +179,7 @@ async function main() {
   }
 
   const execResult = await executeCommand(cmd, {
-    shell: flags.shell,
+    shell: detectedShell,
   });
   if (execResult.error) {
     console.error('Command failed:', execResult.error);

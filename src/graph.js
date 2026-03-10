@@ -26,6 +26,7 @@ pipeline.use(async (state) => {
     query: state.query,
     context: state.context,
     platform: state.platform,
+    shell: state.shell,
   });
   return { ...state, ...commandResult };
 });
@@ -48,8 +49,8 @@ pipeline.use(async (state) => {
   return { ...state, ...explanationResult };
 });
 
-async function runPipeline({ query }) {
-  return pipeline.run({ query, platform: process.platform });
+async function runPipeline({ query, platform = process.platform, shell }) {
+  return pipeline.run({ query, platform, shell });
 }
 
 module.exports = {
