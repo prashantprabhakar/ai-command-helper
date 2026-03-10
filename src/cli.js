@@ -137,8 +137,8 @@ async function main() {
     }
   }
 
-  console.log('\nCommand:');
-  console.log(cmd || '(no command generated)');
+  // console.log('\nCommand:');
+  // console.log(cmd || '(no command generated)');
   if (flags.explain) {
     console.log('\nExplanation:');
     console.log(generationResult.explanation || '(no explanation generated)');
