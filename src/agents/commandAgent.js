@@ -94,8 +94,8 @@ Only output the command. Do NOT output any prose.
   const normalized = raw.replace(/\r?\n+/g, ' ').trim();
   let command = normalized;
 
-  if (!_looksLikeCommand(command) || _hasUnmatchedQuotes(command)) {
-    // If the LLM output doesn't look like a shell command (or has unbalanced quotes),
+  if (_hasUnmatchedQuotes(command) || !_looksLikeCommand(command)) {
+    // If the LLM output doesn't look like a shell command or has unbalanced quotes,
     // fall back to a small rule-based mapper.
     command = _fallbackCommand({ query, platform, shell });
   }

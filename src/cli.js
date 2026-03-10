@@ -6,6 +6,7 @@ const readline = require('readline');
 const { runPipeline } = require('./graph');
 const { executeCommand } = require('./tools/executeCommand');
 const { checkCommandAvailable } = require('./tools/commandChecker');
+const { repairCommand } = require('./agents/repairAgent');
 
 function usage() {
   console.log('Usage: ai-cmd [--yes] [--shell=<shell>] "<natural language instruction>"');
@@ -178,12 +179,55 @@ async function main() {
     process.exit(1);
   }
 
-  const execResult = await executeCommand(cmd, {
-    shell: detectedShell,
-  });
-  if (execResult.error) {
-    console.error('Command failed:', execResult.error);
+  async function runWithRepair(command) {
+    const result = await executeCommand(command, { shell: detectedShell });
+
+    if (!result.error) {
+      return { success: true, command, result };
+    }
+
+    // Try to repair the command once if it fails.
+    const repair = await repairCommand({
+      command,
+      errorMessage: result.error.message,
+      stderr: result.stderr,
+      stdout: result.stdout,
+      platform: process.platform,
+      shell: detectedShell,
+      query: rawQuery,
+    });
+
+    const repairedCommand = (repair || '').trim();
+    if (!repairedCommand || repairedCommand === command) {
+      return { success: false, command, result };
+    }
+
+    console.log('\n[ai-cmd] Repaired command suggestion:');
+    console.log(repairedCommand);
+
+    const shouldRunRepaired = flags.yes || (await askYesNo('\nRun repaired command? (y/n) '));
+    if (!shouldRunRepaired) {
+      return { success: false, command, result };
+    }
+
+    const secondTry = await executeCommand(repairedCommand, { shell: detectedShell });
+    return { success: !secondTry.error, command: repairedCommand, result: secondTry };
+  }
+
+  const runResult = await runWithRepair(cmd);
+  if (!runResult.success) {
+    console.error('Command failed:', runResult.result.error);
+    if (runResult.result.stderr) {
+      console.error(runResult.result.stderr);
+    }
     process.exit(1);
+  }
+
+  if (runResult.result.stdout) {
+    process.stdout.write(runResult.result.stdout);
+  }
+  if (runResult.result.stderr) {
+    process.stderr.write(runResult.result.stderr);
   }
 
   process.exit(0);
