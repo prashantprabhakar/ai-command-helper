@@ -1,6 +1,6 @@
-const { OllamaClient } = require('../tools/ollamaClient');
+const { LLMClient } = require('../tools/llmClient');
 
-const client = new OllamaClient();
+const client = new LLMClient();
 
 /**
  * Generate a shell command from an intent and the user's description.

@@ -1,6 +1,6 @@
-const { OllamaClient } = require('../tools/ollamaClient');
+const { LLMClient } = require('../tools/llmClient');
 
-const client = new OllamaClient();
+const client = new LLMClient();
 
 /**
  * Analyze the user's raw query to determine intent.

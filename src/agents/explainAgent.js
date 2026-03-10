@@ -1,6 +1,6 @@
-const { OllamaClient } = require('../tools/ollamaClient');
+const { LLMClient } = require('../tools/llmClient');
 
-const client = new OllamaClient();
+const client = new LLMClient();
 
 /**
  * Generate a brief explanation for a shell command.
