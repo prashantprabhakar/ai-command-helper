@@ -2,18 +2,6 @@ const { LLMClient } = require('../tools/llmClient');
 
 const client = new LLMClient();
 
-function _isProse(text) {
-  if (!text || typeof text !== 'string') return false;
-  const lower = text.toLowerCase().trim();
-  
-  // Flag obvious prose patterns
-  if (lower.startsWith('the ') || lower.startsWith('this ') || lower.startsWith('it ')) return true;
-  if (lower.includes('explanation:') || lower.includes('command:')) return true;
-  if (lower.startsWith('use ') && !lower.includes('|') && !lower.includes(';')) return true;
-  
-  return false;
-}
-
 /**
  * Generate a shell command from an intent and the user's description.
  * 
@@ -46,7 +34,14 @@ Only output the command. Do NOT output any prose.
   const normalized = raw.replace(/\r?\n+/g, ' ').trim();
 
   // Only filter out obvious prose/non-command text.
-  if (!normalized || _isProse(normalized)) {
+  if (!normalized) {
+    return { command: null };
+  }
+
+  // If the model falls back to a placeholder/error message (e.g. "unable to generate command"),
+  // treat this as a generation failure so downstream logic can repair it.
+  const normalizedLower = normalized.toLowerCase();
+  if (normalizedLower.includes('unable to generate command') || normalizedLower.includes('install ollama')) {
     return { command: null };
   }
 

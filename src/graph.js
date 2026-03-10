@@ -3,7 +3,6 @@ const { analyzeIntent } = require('./agents/intentAgent');
 const { generateCommand } = require('./agents/commandAgent');
 const { validateSafety } = require('./agents/safetyAgent');
 const { generateExplanation } = require('./agents/explainAgent');
-const { runAgent } = require('./agents/runAgent');
 
 const pipeline = new LangGraph();
 const debug = !!process.env.AI_CMD_DEBUG;
@@ -65,16 +64,8 @@ pipeline.use(async (state) => {
   return { ...state, ...explanationResult };
 });
 
-pipeline.use(async (state) => {
-  if (debug) {
-    // eslint-disable-next-line no-console
-    console.log('[ai-cmd] pipeline: running command');
-  }
-  return runAgent(state);
-});
-
-async function runPipeline({ query, platform = process.platform, shell, runCommand = false }) {
-  return pipeline.run({ query, platform, shell, runCommand });
+async function runPipeline({ query, platform = process.platform, shell }) {
+  return pipeline.run({ query, platform, shell });
 }
 
 module.exports = {

@@ -3,6 +3,7 @@
 const { runPipeline } = require('./graph');
 const { checkCommandAvailable } = require('./tools/commandChecker');
 const { askYesNo } = require('./tools/prompt');
+const { runAgent } = require('./agents/runAgent')
 
 function usage() {
   console.log('Usage: ai-cmd [--yes] [--shell=<shell>] "<natural language instruction>"');
@@ -93,7 +94,6 @@ async function main() {
     query: rawQuery,
     platform: process.platform,
     shell: detectedShell,
-    runCommand: false,
   });
 
   // Normalize command string (strip wrapping backticks/quotes) for display and execution.
@@ -137,35 +137,39 @@ async function main() {
     process.exit(0);
   }
 
-  if (!generationResult.command) {
-    console.log('No command to execute.');
-    process.exit(1);
-  }
-
-  // Execute (and repair if needed) via the pipeline.
-  const execResult = await runPipeline({
-    query: rawQuery,
-    platform: process.platform,
-    shell: detectedShell,
-    runCommand: true,
+  // Execute (and repair if needed) via the runAgent directly.
+  const execResult = await runAgent({
     command: cmd,
+    shell: detectedShell,
+    platform: process.platform,
+    query: rawQuery,
+    runCommand: true,
   });
 
   if (!execResult.executedSuccessfully) {
-    console.error('\n❌ Unable to process your request after retrying.');
+    console.error('\n❌ Unable to execute command after retrying.');
     if (execResult.attempts && execResult.attempts > 1) {
       console.error(`   (Attempted ${execResult.attempts} time${execResult.attempts > 1 ? 's' : ''})`);
     }
     if (execResult.errorMessage) {
-      console.error(`   Error: ${execResult.errorMessage}`);
+      console.error(`   Reason: ${execResult.errorMessage}`);
+    }
+    if (execResult.stderr) {
+      console.error(execResult.stderr);
     }
     process.exit(1);
   }
 
   if (execResult.stdout) {
+    // Separate the explanation from the command output when printing.
+    // Some commands (like dir/ls) can appear immediately after the explanation
+    // output if there isn't a blank line.
+    process.stdout.write('\n');
     process.stdout.write(execResult.stdout);
   }
   if (execResult.stderr) {
+    // Stderr often follows stdout directly; add a newline to keep output clean.
+    process.stderr.write('\n');
     process.stderr.write(execResult.stderr);
   }
 

@@ -9,7 +9,18 @@ const client = new LLMClient();
  * The model is given the original command, the error output, and a short description of the failure.
  */
 async function repairCommand({ command, errorMessage, stderr, stdout, platform, shell, query }) {
-  const prompt = `You are a helpful assistant that corrects a shell command when it fails to run.
+  const isMissingCommand = !command || !command.trim();
+
+  const prompt = isMissingCommand
+    ? `You are a helpful assistant that generates a shell command based on the user request.
+
+Target platform: ${platform}
+Shell: ${shell || 'unknown'}
+User request: ${query}
+
+Only output a single shell command. Do NOT output any explanation, prose, or comments.
+`
+    : `You are a helpful assistant that corrects a shell command when it fails to run.
 
 Original command:
 ${command}
@@ -38,10 +49,10 @@ Provide a fixed command that is likely to work on this platform and shell. ONLY 
     });
 
     const normalized = raw.replace(/\r?\n+/g, ' ').trim();
-    return normalized;
+    return normalized || null;
   } catch (err) {
-    // If the model fails, just return the original command to avoid losing the output.
-    return command;
+    // If the model fails, return null so the caller can stop retrying.
+    return null;
   }
 }
 
