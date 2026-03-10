@@ -1,0 +1,21 @@
+{
+  "name": "ai-cli-helper",
+  "version": "0.1.0",
+  "description": "A simple CLI that translates natural language into safe shell commands using a local LLM.",
+  "bin": {
+    "ai-cmd": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node ./src/cli.js"
+  },
+  "keywords": [
+    "cli",
+    "llm",
+    "ollama",
+    "langgraph",
+    "agent"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {}
+}
