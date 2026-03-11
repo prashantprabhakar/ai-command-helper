@@ -49,7 +49,6 @@ function _extractCommand(text) {
 
   return firstLine;
 }
-
 async function repairCommand({ command, errorMessage, stderr, stdout, platform, shell, query }) {
   const isMissingCommand = !command || !command.trim();
 
@@ -90,25 +89,28 @@ Provide a fixed command that is likely to work on this platform and shell. ONLY 
       maxTokens: 150,
     });
 
-    const normalized = raw.replace(/\r?\n+/g, ' ').trim();
+    if (!raw) return null;
+
+    const cleaned = raw
+      .replace(/```[a-z]*\n?/gi, '')
+      .replace(/```/g, '')
+      .trim();
+
+    const normalized = cleaned.replace(/\r?\n+/g, ' ').trim();
+
     const extracted = _extractCommand(normalized);
     if (!extracted) return null;
 
-    // If the LLM output includes explanation, try to remove it.
     const candidate = extracted.trim();
+
+    if (candidate === command) return null;
+
     if (_looksLikeCommand(candidate)) {
       return candidate;
     }
 
-    // Fallback: if the first line doesn't look like a command, bail so we don't
-    // run nonsense shell code.
     return null;
   } catch (err) {
-    // If the model fails, return null so the caller can stop retrying.
     return null;
   }
 }
-
-module.exports = {
-  repairCommand,
-};

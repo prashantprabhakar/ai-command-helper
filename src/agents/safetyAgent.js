@@ -5,15 +5,25 @@
  */
 
 const riskyPatterns = [
+  { regex: /\brm\s+-rf\s+\/\b/, reason: 'Root filesystem deletion (rm -rf /)' },
   { regex: /\brm\s+-rf\b/, reason: 'Recursive delete (rm -rf) detected' },
   { regex: /\brm\s+-r\b/, reason: 'Recursive remove (rm -r) detected' },
-  { regex: /\bmkfs\b/, reason: 'Filesystem formatting command detected' },
-  { regex: /\bdd\b.*\bif=.*\bof=/, reason: 'Low-level disk write (dd) detected' },
-  { regex: /\b:\(\)\s*\{\s*\|\s*\}:\s*;/, reason: 'Fork bomb detected' },
   { regex: /\bsudo\s+rm\s+-rf\b/, reason: 'Sudo recursive delete' },
+  { regex: /\bsudo\s+rm\s+-rf\s+\/\b/, reason: 'Sudo root filesystem deletion' },
+
+  { regex: /\bmkfs\b/, reason: 'Filesystem formatting command detected' },
+  { regex: /\bmkfs\.\b/, reason: 'Filesystem formatting command detected' },
+
+  { regex: /\bdd\b.*\bif=.*\bof=/, reason: 'Low-level disk write (dd) detected' },
+
   { regex: /\bshutdown\b/, reason: 'Shutdown command detected' },
   { regex: /\breboot\b/, reason: 'Reboot command detected' },
-  { regex: /\bmkfs\.\b/, reason: 'Filesystem formatting command detected' },
+
+  { regex: /\bchmod\s+777\s+-r\b/, reason: 'Recursive world-writable permission change' },
+
+  { regex: /\b:\(\)\s*\{\s*\|\s*\}:\s*;/, reason: 'Fork bomb detected' },
+  { regex: /:\(\)\s*\{\s*:\|\:\&\s*\};:/, reason: 'Fork bomb detected' },
+
   { regex: /\b:>\b/, reason: 'Potential destructive redirection detected' },
 ];
 
@@ -22,7 +32,7 @@ function validateSafety({ command }) {
     return { risky: false };
   }
 
-  const normalized = command.trim();
+  const normalized = command.trim().toLowerCase();
 
   for (const pattern of riskyPatterns) {
     if (pattern.regex.test(normalized)) {

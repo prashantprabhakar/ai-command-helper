@@ -30,11 +30,21 @@ Only output the command. Do NOT output any prose.
     maxTokens: 180,
   });
 
+  const cleaned = raw
+    .replace(/```[a-z]*\n?/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
   // Normalize output (flatten newlines into spaces).
-  const normalized = raw.replace(/\r?\n+/g, ' ').trim();
+  const normalized = cleaned.replace(/\r?\n+/g, ' ').trim();
+
 
   // Only filter out obvious prose/non-command text.
   if (!normalized) {
+    return { command: null };
+  }
+
+  if (normalized.length > 200) {
     return { command: null };
   }
 
