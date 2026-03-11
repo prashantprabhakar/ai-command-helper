@@ -1,3 +1,4 @@
+// runAgent.js
 const { executeCommand } = require('../tools/executeCommand');
 const { repairCommand } = require('./repairAgent');
 
@@ -14,8 +15,15 @@ const { repairCommand } = require('./repairAgent');
  * Adds to state:
  * - stdout, stderr, executedCommand, executedSuccessfully
  */
+
+function _normalizeCommand(cmd) {
+  if (!cmd || typeof cmd !== 'string') return '';
+  return cmd.trim().replace(/^['"`]+|['"`]+$/g, '');
+}
+
 function _balanceQuotes(cmd) {
   if (!cmd || typeof cmd !== 'string') return cmd;
+
   const quoteChars = ['"', "'", '`'];
   let balanced = cmd;
 
@@ -33,13 +41,20 @@ async function runAgent(state) {
   const { command, shell, runCommand, platform, query, verbose } = state;
 
   if (!runCommand) {
-    return { ...state, executedSuccessfully: false, executedCommand: null, stdout: '', stderr: '' };
+    return {
+      ...state,
+      executedSuccessfully: false,
+      executedCommand: null,
+      stdout: '',
+      stderr: '',
+    };
   }
 
   const maxAttempts = 3;
   let attempts = 0;
-  let currentCommand = command ? command.trim() : '';
+  let currentCommand = _normalizeCommand(command);
   let lastExec = { error: new Error('No command generated'), stdout: '', stderr: '' };
+
   const attemptHistory = [];
 
   while (attempts < maxAttempts) {
@@ -55,22 +70,17 @@ async function runAgent(state) {
       stderr: '',
     };
 
-    // Print each attempt so users see progress.
     if (attempts === 1) {
-      // First run is the primary command.
-      // eslint-disable-next-line no-console
       process.stdout.write(`\nRunning command: ${attemptRecord.command}`);
     } else {
-      // Subsequent retries should be clearly labeled as such.
-      // eslint-disable-next-line no-console
       process.stdout.write(`\nAttempt #${attempts} -> running command: ${attemptRecord.command}`);
     }
 
     if (currentCommand) {
-      // Apply simple heuristics to fix common issues (like missing closing quotes)
       currentCommand = _balanceQuotes(currentCommand);
 
       lastExec = await executeCommand(currentCommand, { shell });
+
       attemptRecord.stdout = lastExec.stdout;
       attemptRecord.stderr = lastExec.stderr;
       attemptRecord.exitCode = lastExec.error?.code;
@@ -79,7 +89,6 @@ async function runAgent(state) {
         attemptRecord.success = true;
         attemptHistory.push(attemptRecord);
 
-        // eslint-disable-next-line no-console
         process.stdout.write(' ✅\n');
 
         return {
@@ -94,22 +103,16 @@ async function runAgent(state) {
       }
 
       attemptRecord.errorMessage = (lastExec.error.message || '').split(/\r?\n/)[0];
-      // eslint-disable-next-line no-console
       process.stdout.write(' ❌\n');
 
       if (verbose) {
-        // Print a short error line below to keep the command line clean.
-        // eslint-disable-next-line no-console
         console.error(`    Error: ${attemptRecord.errorMessage}`);
       }
     } else {
-      // No command to execute; this is treated as a failure and triggers repair.
       attemptRecord.errorMessage = 'No command was generated to execute.';
-      // eslint-disable-next-line no-console
       process.stdout.write(' ❌\n');
 
       if (verbose) {
-        // eslint-disable-next-line no-console
         console.error('    Error: No command generated.');
       }
     }
@@ -126,15 +129,16 @@ async function runAgent(state) {
       query,
     });
 
-    const repairedCommand = (repaired || '').trim();
-    if (!repairedCommand || repairedCommand === currentCommand) {
+    const repairedCommand = _normalizeCommand(repaired);
+
+    if (!repairedCommand || repairedCommand === currentCommand.trim()) {
       break;
     }
 
     if (verbose) {
-      // eslint-disable-next-line no-console
       console.log(`  🔧 Repair suggested: ${repairedCommand}`);
     }
+
     currentCommand = repairedCommand;
   }
 

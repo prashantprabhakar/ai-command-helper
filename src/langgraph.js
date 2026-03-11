@@ -6,24 +6,33 @@
  */
 
 class LangGraph {
-  constructor(nodes = []) {
-    this.nodes = nodes;
+  constructor() {
+    this.nodes = {};
+    this.startNode = null;
   }
 
-  use(node) {
-    this.nodes.push(node);
+  add(name, node) {
+    this.nodes[name] = node;
+    if (!this.startNode) {
+      this.startNode = name;
+    }
     return this;
   }
 
   async run(initialState) {
+    let current = this.startNode;
     let state = { ...initialState };
-    for (const node of this.nodes) {
-      state = await node(state);
+
+    while (current) {
+      const node = this.nodes[current];
+      const result = await node(state);
+
+      state = result.state || state;
+      current = result.next;
     }
+
     return state;
   }
 }
 
-module.exports = {
-  LangGraph,
-};
+module.exports = { LangGraph };

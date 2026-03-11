@@ -2,21 +2,19 @@
 
 const { runPipeline } = require('./graph');
 const { checkCommandAvailable } = require('./tools/commandChecker');
-const { askYesNo } = require('./tools/prompt');
-const { runAgent } = require('./agents/runAgent')
+const { runAgent } = require('./agents/runAgent');
 
 function usage() {
-    console.log('Usage: ai-cmd [--yes] [--explain] [--shell=<shell>] "<natural language instruction>"');
-    console.log('Example: ai-cmd "find large files"');
-    console.log('Example (show explanation): ai-cmd --explain "find large files"');
+  console.log('Usage: ai-cmd [--yes] [--explain] [--shell=<shell>] "<natural language instruction>"');
+  console.log('Example: ai-cmd "find large files"');
+  console.log('Example (show explanation): ai-cmd --explain "find large files"');
   console.log('Example (PowerShell): ai-cmd --shell=pwsh "find large files"');
 }
 
 function detectShell() {
   const env = process.env;
-
   // On Windows, prefer MSYS/MinGW when present (git bash)
-  if (process.platform === 'win32') {
+   if (process.platform === 'win32') {
     // Git Bash / MSYS
     if (env.MSYSTEM) {
       return 'bash';
@@ -33,7 +31,6 @@ function detectShell() {
     return 'cmd';
   }
 
-  // On POSIX, use SHELL if available.
   if (env.SHELL) {
     const lowered = env.SHELL.toLowerCase();
     if (lowered.includes('zsh')) return 'zsh';
@@ -48,6 +45,7 @@ function detectShell() {
 async function main() {
   const rawArgs = process.argv.slice(2);
   const args = [];
+
   const flags = {
     yes: false,
     shell: undefined,
@@ -111,17 +109,20 @@ async function main() {
 
   const detectedShell = flags.shell || detectShell();
 
-  // Generate the command (without executing it).
   const generationResult = await runPipeline({
     query: rawQuery,
     platform: process.platform,
     shell: detectedShell,
+    explain: flags.explain,
   });
 
-  // Normalize command string (strip wrapping backticks/quotes) for display and execution.
+  if (generationResult.cancelled) {
+    console.log('Cancelled.');
+    process.exit(0);
+  }
+
   const cmd = (generationResult.command || '').trim().replace(/^['"`]+|['"`]+$/g, '');
 
-  // Only check availability if we have a command to validate.
   let availability;
   if (cmd) {
     availability = await checkCommandAvailable(cmd, process.platform);
@@ -137,8 +138,6 @@ async function main() {
     }
   }
 
-  // console.log('\nCommand:');
-  // console.log(cmd || '(no command generated)');
   if (flags.explain) {
     console.log('\nExplanation:');
     console.log(generationResult.explanation || '(no explanation generated)');
@@ -151,21 +150,13 @@ async function main() {
     }
   }
 
-  const shouldRun =
-    flags.yes ||
-    (!generationResult.risky ? true : await askYesNo('\nRun command? (y/n) '));
+  const shouldRun = flags.yes || true;
 
   if (generationResult.risky && availability?.exists === false && shouldRun) {
     console.log('\nNote: the command does not appear to be installed.');
     console.log('If you still want to attempt it, the error will be shown below.');
   }
 
-  if (generationResult.risky && !shouldRun) {
-    console.log('Cancelled.');
-    process.exit(0);
-  }
-
-  // Execute (and repair if needed) via the runAgent directly.
   const execResult = await runAgent({
     command: cmd,
     shell: detectedShell,
@@ -179,7 +170,9 @@ async function main() {
     if (flags.verbose) {
       console.error('\n❌ Unable to execute command after retrying.');
       if (execResult.attempts && execResult.attempts > 1) {
-        console.error(`   (Attempted ${execResult.attempts} time${execResult.attempts > 1 ? 's' : ''})`);
+        console.error(
+          `   (Attempted ${execResult.attempts} time${execResult.attempts > 1 ? 's' : ''})`
+        );
       }
 
       if (Array.isArray(execResult.attemptHistory) && execResult.attemptHistory.length) {
@@ -187,6 +180,7 @@ async function main() {
         execResult.attemptHistory.forEach((attempt) => {
           const status = attempt.success ? '✅' : '❌';
           const msg = attempt.errorMessage ? ` - ${attempt.errorMessage}` : '';
+
           console.error(`  ${attempt.attempt}) ${attempt.command} ${status}${msg}`);
         });
       }
@@ -206,14 +200,10 @@ async function main() {
   }
 
   if (execResult.stdout) {
-    // Separate the explanation from the command output when printing.
-    // Some commands (like dir/ls) can appear immediately after the explanation
-    // output if there isn't a blank line.
     process.stdout.write('\n');
     process.stdout.write(execResult.stdout);
   }
   if (execResult.stderr) {
-    // Stderr often follows stdout directly; add a newline to keep output clean.
     process.stderr.write('\n');
     process.stderr.write(execResult.stderr);
   }
