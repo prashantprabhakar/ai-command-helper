@@ -114,3 +114,7 @@ Provide a fixed command that is likely to work on this platform and shell. ONLY 
     return null;
   }
 }
+
+module.exports = {
+  repairCommand,
+};

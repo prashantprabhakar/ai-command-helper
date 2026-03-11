@@ -3,6 +3,7 @@ const { analyzeIntent } = require('./agents/intentAgent');
 const { generateCommand } = require('./agents/commandAgent');
 const { validateSafety } = require('./agents/safetyAgent');
 const { generateExplanation } = require('./agents/explainAgent');
+const { reviewCommand } = require('./agents/selfCriticAgent');
 const { askYesNo } = require('./tools/prompt');
 
 const pipeline = new LangGraph();
@@ -28,6 +29,20 @@ pipeline.add("command", async (state) => {
 
   return {
     state: { ...state, ...commandResult },
+    next: "critic"
+  };
+});
+
+pipeline.add("critic", async (state) => {
+  const criticResult = await reviewCommand({
+    command: state.command,
+    query: state.query,
+    platform: state.platform,
+    shell: state.shell,
+  });
+
+  return {
+    state: { ...state, ...criticResult },
     next: "safety"
   };
 });
