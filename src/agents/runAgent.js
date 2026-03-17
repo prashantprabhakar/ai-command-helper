@@ -38,7 +38,7 @@ function _balanceQuotes(cmd) {
 }
 
 async function runAgent(state) {
-  const { command, shell, runCommand, platform, query, verbose } = state;
+  const { client, command, shell, runCommand, platform, query, verbose } = state;
 
   if (!runCommand) {
     return {
@@ -120,6 +120,7 @@ async function runAgent(state) {
     attemptHistory.push(attemptRecord);
 
     const repaired = await repairCommand({
+      client,
       command: currentCommand,
       errorMessage: attemptRecord.errorMessage || 'Failed to generate or execute command',
       stderr: attemptRecord.stderr,

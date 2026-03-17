@@ -76,8 +76,8 @@ By default, the tool uses **Ollama** (if installed) via the `ollama` CLI.
 
 You can configure a different provider using environment variables:
 
-- `AI_CLI_PROVIDER` — `ollama` (default), `openai`, `anthropic`, `claude`
-- `AI_CLI_MODEL` — model name to use (e.g. `mistral:latest`, `gpt-4o`, `claude-3.1`)
+- `AI_CLI_PROVIDER` — `ollama` (default), `openai`, `anthropic`, `github`
+- `AI_CLI_MODEL` — model name to use (for GitHub Models, use IDs like `openai/gpt-4.1` or `openai/gpt-4o`)
 
 ### Example (OpenAI)
 
@@ -96,3 +96,14 @@ export AI_CLI_PROVIDER=anthropic
 export AI_CLI_MODEL=claude-3.1
 node ./src/cli.js "find large files"
 ```
+
+### Example (GitHub Models)
+
+```bash
+export GITHUB_TOKEN="<github pat with models:read>"
+export AI_CLI_PROVIDER=github
+export AI_CLI_MODEL=openai/gpt-4.1
+node ./src/cli.js "find large files"
+```
+
+GitHub Models requires a personal access token with `models:read` permission. It also expects model IDs in `{publisher}/{model}` format, for example `openai/gpt-4.1`. If you pass a provider-specific snapshot name like `gpt-4.1-2025-04-14`, the API returns an unknown model error.

@@ -1,12 +1,8 @@
-const { LLMClient } = require('../tools/llmClient');
-
-const client = new LLMClient();
-
 /**
  * Analyze the user's raw query to determine intent.
  * This is intentionally lightweight and uses a simple prompt.
  */
-async function analyzeIntent({ query }) {
+async function analyzeIntent({ client, query }) {
   const prompt = `You are an assistant that extracts a short intent label from a user's request.
 
 User request: "${query}"
@@ -14,11 +10,7 @@ User request: "${query}"
 Provide a single intent label (snake_case) and a short context/summary. Output as JSON with keys: intent, context.
 `;
 
-  const raw = await client.generate({
-    model: 'mistral',
-    prompt,
-    maxTokens: 150,
-  });
+  const raw = await client.generate({ prompt, maxTokens: 150 });
 
   // Try to parse JSON from the model response.
   let intent = 'unknown';

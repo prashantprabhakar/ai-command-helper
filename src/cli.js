@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 
+require('dotenv').config();
+
 const { runPipeline } = require('./graph');
 const { checkCommandAvailable } = require('./tools/commandChecker');
 const { runAgent } = require('./agents/runAgent');
+const { LLMClient } = require('./tools/llmClient');
 
 function usage() {
   console.log('Usage: ai-cmd [--yes] [--explain] [--shell=<shell>] "<natural language instruction>"');
@@ -108,12 +111,14 @@ async function main() {
   }
 
   const detectedShell = flags.shell || detectShell();
+  const client = new LLMClient();
 
   const generationResult = await runPipeline({
     query: rawQuery,
     platform: process.platform,
     shell: detectedShell,
     explain: flags.explain,
+    client,
   });
 
   if (generationResult.cancelled) {
@@ -150,7 +155,7 @@ async function main() {
     }
   }
 
-  const shouldRun = flags.yes || true;
+  const shouldRun = flags.yes;
 
   if (generationResult.risky && availability?.exists === false && shouldRun) {
     console.log('\nNote: the command does not appear to be installed.');
@@ -158,6 +163,7 @@ async function main() {
   }
 
   const execResult = await runAgent({
+    client,
     command: cmd,
     shell: detectedShell,
     platform: process.platform,

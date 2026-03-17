@@ -1,7 +1,3 @@
-const { LLMClient } = require('../tools/llmClient');
-
-const client = new LLMClient();
-
 /**
  * Attempt to repair a failing shell command by asking the model for a corrected command.
  *
@@ -49,7 +45,7 @@ function _extractCommand(text) {
 
   return firstLine;
 }
-async function repairCommand({ command, errorMessage, stderr, stdout, platform, shell, query }) {
+async function repairCommand({ client, command, errorMessage, stderr, stdout, platform, shell, query }) {
   const isMissingCommand = !command || !command.trim();
 
   const prompt = isMissingCommand
@@ -83,11 +79,7 @@ Provide a fixed command that is likely to work on this platform and shell. ONLY 
 `;
 
   try {
-    const raw = await client.generate({
-      model: 'mistral:latest',
-      prompt,
-      maxTokens: 150,
-    });
+    const raw = await client.generate({ prompt, maxTokens: 150 });
 
     if (!raw) return null;
 

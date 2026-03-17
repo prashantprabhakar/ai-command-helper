@@ -10,7 +10,7 @@ const pipeline = new LangGraph();
 const debug = !!process.env.AI_CMD_DEBUG;
 
 pipeline.add("intent", async (state) => {
-  const intentResult = await analyzeIntent({ query: state.query });
+  const intentResult = await analyzeIntent({ client: state.client, query: state.query });
 
   return {
     state: { ...state, ...intentResult },
@@ -20,6 +20,7 @@ pipeline.add("intent", async (state) => {
 
 pipeline.add("command", async (state) => {
   const commandResult = await generateCommand({
+    client: state.client,
     intent: state.intent,
     query: state.query,
     context: state.context,
@@ -35,6 +36,7 @@ pipeline.add("command", async (state) => {
 
 pipeline.add("critic", async (state) => {
   const criticResult = await reviewCommand({
+    client: state.client,
     command: state.command,
     query: state.query,
     platform: state.platform,
@@ -81,7 +83,8 @@ pipeline.add("confirm", async (state) => {
 
 pipeline.add("explain", async (state) => {
   const explanationResult = await generateExplanation({
-    command: state.command
+    client: state.client,
+    command: state.command,
   });
 
   return {
@@ -90,8 +93,8 @@ pipeline.add("explain", async (state) => {
   };
 });
 
-async function runPipeline({ query, platform = process.platform, shell, explain = false }) {
-  return pipeline.run({ query, platform, shell, explain });
+async function runPipeline({ query, platform = process.platform, shell, explain = false, client }) {
+  return pipeline.run({ query, platform, shell, explain, client });
 }
 
 module.exports = {

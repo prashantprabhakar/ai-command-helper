@@ -1,15 +1,10 @@
 // agents/selfCriticAgent.js
 
-const { LLMClient } = require('../tools/llmClient');
-
-const client = new LLMClient();
-
 /**
  * Reviews a generated command and fixes it if necessary.
  * The model acts as a second-pass validator.
  */
-
-async function reviewCommand({ command, query, platform, shell }) {
+async function reviewCommand({ client, command, query, platform, shell }) {
   if (!command || typeof command !== 'string') {
     return { command };
   }
@@ -36,11 +31,7 @@ If the command is already correct, return it unchanged.
 `;
 
   try {
-    const raw = await client.generate({
-      model: 'mistral:latest',
-      prompt,
-      maxTokens: 120,
-    });
+    const raw = await client.generate({ prompt, maxTokens: 120 });
 
     if (!raw) {
       return { command };
